@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CWM — Complex Working Memory</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #app {
+      width: 100%;
+      max-width: 680px;
+      padding: 24px 16px;
+      position: relative;
+    }
+
+    /* ── Screens ── */
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 22px;
+      min-height: 500px;
+      justify-content: center;
+    }
+    .screen.active { display: flex; }
+
+    /* ── Feedback overlay ── */
+    #fb-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 999;
+    }
+    #fb-icon {
+      font-size: 7rem;
+      line-height: 1;
+      opacity: 0;
+      transform: scale(0.4);
+      transition: opacity 0.12s, transform 0.12s cubic-bezier(.34,1.56,.64,1);
+    }
+    #fb-icon.show { opacity: 1; transform: scale(1); }
+    .fb-ok  { color: #3fb950; text-shadow: 0 0 40px #3fb950; }
+    .fb-err { color: #f85149; text-shadow: 0 0 40px #f85149; }
+
+    /* ── Menu ── */
+    .app-title {
+      font-size: clamp(1.9rem, 5vw, 2.6rem);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(130deg, #58a6ff 0%, #a5d6ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align: center;
+    }
+
+    .app-tagline {
+      font-size: 0.88rem;
+      color: #7d8590;
+      text-align: center;
+      max-width: 380px;
+      line-height: 1.65;
+    }
+
+    #level-pill {
+      background: rgba(56,139,253,.14);
+      border: 1px solid rgba(56,139,253,.4);
+      color: #58a6ff;
+      border-radius: 100px;
+      padding: 5px 22px;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      width: 100%;
+    }
+
+    .mode-btn {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 16px;
+      padding: 28px 16px;
+      cursor: pointer;
+      transition: background .18s, border-color .18s, transform .14s;
+      text-align: center;
+      color: inherit;
+    }
+    .mode-btn:hover {
+      background: rgba(56,139,253,.09);
+      border-color: rgba(56,139,253,.35);
+      transform: translateY(-2px);
+    }
+    .mode-icon { font-size: 2.4rem; display: block; margin-bottom: 10px; }
+    .mode-name { font-size: 1rem; font-weight: 700; display: block; margin-bottom: 6px; }
+    .mode-desc { font-size: 0.76rem; color: #7d8590; line-height: 1.45; }
+
+    /* ── Game progress ── */
+    .game-header {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .game-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #7d8590;
+    }
+    .prog-track {
+      width: 100%;
+      height: 5px;
+      background: rgba(255,255,255,.08);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #game-prog {
+      height: 100%;
+      background: linear-gradient(90deg, #388bfd, #58a6ff);
+      border-radius: 3px;
+      transition: width .35s ease;
+    }
+
+    /* ── Stage header ── */
+    .stage-hdr {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .stage-title { font-size: 1.25rem; font-weight: 700; }
+    .stage-hint  { font-size: 0.82rem; color: #7d8590; }
+
+    /* ── Dot pattern (Spatial decision) ── */
+    .dot-pattern {
+      background: rgba(255,255,255,.02);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 20px;
+      display: grid;
+      gap: 6px;
+    }
+    .dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.07);
+    }
+    .dot.on {
+      background: #58a6ff;
+      box-shadow: 0 0 6px rgba(88,166,255,.7);
+    }
+
+    /* ── Word card (Verbal decision) ── */
+    .word-card {
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 16px;
+      padding: 32px 56px;
+      font-size: clamp(1.9rem, 6vw, 2.8rem);
+      font-weight: 800;
+      letter-spacing: 5px;
+      text-align: center;
+      min-width: min(320px, 85vw);
+    }
+
+    /* ── Yes / No buttons ── */
+    .answer-row { display: flex; gap: 14px; }
+    .btn-yes, .btn-no {
+      padding: 13px 44px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: filter .14s, transform .1s;
+      letter-spacing: .5px;
+    }
+    .btn-yes { background: #238636; color: #fff; }
+    .btn-no  { background: #b91c1c; color: #fff; }
+    .btn-yes:hover:not(:disabled) { filter: brightness(1.18); transform: scale(1.03); }
+    .btn-no:hover:not(:disabled)  { filter: brightness(1.18); transform: scale(1.03); }
+    .btn-yes:disabled, .btn-no:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    /* ── 4×4 memory grid ── */
+    .grid4 {
+      display: grid;
+      grid-template-columns: repeat(4, 70px);
+      grid-template-rows:    repeat(4, 70px);
+      gap: 8px;
+    }
+    .gcell {
+      background: rgba(255,255,255,.04);
+      border: 2px solid rgba(255,255,255,.12);
+      border-radius: 10px;
+      transition: background .15s, border-color .15s, box-shadow .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .95rem;
+      font-weight: 700;
+      color: #c9d1d9;
+    }
+    .gcell.lit {
+      background: rgba(56,139,253,.35);
+      border-color: #388bfd;
+      box-shadow: 0 0 18px rgba(56,139,253,.45);
+    }
+    .gcell.clickable { cursor: pointer; }
+    .gcell.clickable:hover {
+      background: rgba(56,139,253,.13);
+      border-color: rgba(56,139,253,.4);
+    }
+    .gcell.picked {
+      background: rgba(56,139,253,.28);
+      border-color: #388bfd;
+    }
+    .gcell.r-ok  { background: rgba(63,185,80,.25);  border-color: #3fb950; box-shadow: 0 0 12px rgba(63,185,80,.35); color: #3fb950; }
+    .gcell.r-bad { background: rgba(248,81,73,.18);   border-color: #f85149; color: #f85149; }
+    .gcell.r-miss { box-shadow: 0 0 0 3px #3fb950 inset; }
+
+    /* ── Big letter (Verbal memory) ── */
+    .big-letter {
+      font-size: clamp(5rem, 18vw, 7rem);
+      font-weight: 900;
+      color: #58a6ff;
+      text-shadow: 0 0 40px rgba(88,166,255,.45);
+      line-height: 1;
+      animation: letterPop .3s cubic-bezier(.34,1.56,.64,1) forwards;
+    }
+    @keyframes letterPop {
+      from { transform: scale(.3) rotate(-12deg); opacity: 0; }
+      to   { transform: scale(1)  rotate(0deg);   opacity: 1; }
+    }
+
+    /* ── Memory timer bar ── */
+    .timer-track {
+      width: 180px;
+      height: 4px;
+      background: rgba(255,255,255,.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    #mem-timer {
+      height: 100%;
+      background: #58a6ff;
+      border-radius: 2px;
+      width: 100%;
+    }
+
+    /* ── Recall screen ── */
+    .recall-meta {
+      font-size: .82rem;
+      color: #7d8590;
+    }
+    .recall-slots {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      min-height: 46px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,.03);
+      border-radius: 10px;
+      align-items: center;
+      width: 100%;
+    }
+    .rslot {
+      width: 40px; height: 40px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .85rem;
+      font-weight: 700;
+    }
+    .rslot.filled {
+      background: rgba(56,139,253,.2);
+      border: 1px solid rgba(56,139,253,.4);
+      color: #58a6ff;
+    }
+    .rslot.empty {
+      background: rgba(255,255,255,.04);
+      border: 1px dashed rgba(255,255,255,.15);
+    }
+
+    /* ── Alphabet grid ── */
+    .alpha-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 52px);
+      gap: 6px;
+    }
+    .acell {
+      height: 52px;
+      background: rgba(255,255,255,.04);
+      border: 1.5px solid rgba(255,255,255,.12);
+      border-radius: 9px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-weight: 700;
+      transition: background .14s, border-color .14s;
+      user-select: none;
+    }
+    .acell:hover:not(.a-dis) {
+      background: rgba(56,139,253,.12);
+      border-color: rgba(56,139,253,.4);
+    }
+    .acell.a-picked { background: rgba(56,139,253,.25); border-color: #388bfd; color: #79c0ff; }
+    .acell.r-ok     { background: rgba(63,185,80,.25);  border-color: #3fb950; color: #3fb950; }
+    .acell.r-bad    { background: rgba(248,81,73,.18);  border-color: #f85149; color: #f85149; }
+    .acell.r-miss   { box-shadow: 0 0 0 2px #3fb950 inset; color: #3fb950; }
+
+    /* ── Recall action buttons ── */
+    .recall-actions { display: flex; gap: 10px; }
+    .btn-clear {
+      padding: 10px 26px;
+      background: rgba(248,81,73,.1);
+      border: 1px solid rgba(248,81,73,.25);
+      border-radius: 9px;
+      color: #f85149;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .14s;
+    }
+    .btn-clear:hover:not(:disabled) { background: rgba(248,81,73,.2); }
+    .btn-clear:disabled { opacity: .35; cursor: not-allowed; }
+
+    .btn-submit {
+      padding: 10px 36px;
+      background: #1f6feb;
+      border: none;
+      border-radius: 9px;
+      color: #fff;
+      font-size: .88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: filter .14s, transform .1s;
+    }
+    .btn-submit:hover:not(:disabled) { filter: brightness(1.15); transform: scale(1.02); }
+    .btn-submit:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+
+    /* ── Result screen ── */
+    .result-emoji   { font-size: 4rem; line-height: 1; }
+    .result-heading { font-size: 2rem; font-weight: 800; text-align: center; }
+    .result-heading.pass { color: #3fb950; }
+    .result-heading.fail { color: #f85149; }
+    .result-sub { font-size: .88rem; color: #7d8590; text-align: center; }
+
+    .stats-row {
+      display: flex;
+      gap: 32px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 18px 36px;
+    }
+    .stat-box { text-align: center; }
+    .stat-val { font-size: 1.7rem; font-weight: 800; color: #58a6ff; }
+    .stat-lbl { font-size: .72rem; color: #7d8590; margin-top: 4px; }
+
+    .result-btns { display: flex; gap: 12px; }
+    .btn-menu {
+      padding: 11px 28px;
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 9px;
+      color: #e6edf3;
+      font-size: .92rem;
+      cursor: pointer;
+      transition: background .14s;
+    }
+    .btn-menu:hover { background: rgba(255,255,255,.13); }
+
+    .btn-again {
+      padding: 11px 32px;
+      background: #1f6feb;
+      border: none;
+      border-radius: 9px;
+      color: #fff;
+      font-size: .92rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: filter .14s, transform .1s;
+    }
+    .btn-again:hover { filter: brightness(1.15); transform: scale(1.02); }
+
+    /* ── Round banner ── */
+    .round-banner { font-size: 1.5rem; font-weight: 700; color: #58a6ff; text-align: center; }
+    .round-sub { font-size: .82rem; color: #7d8590; text-align: center; }
+
+    /* ── Animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeUp .22s ease forwards; }
+
+    /* ── Responsive ── */
+    @media (max-width: 500px) {
+      .mode-grid { grid-template-columns: 1fr; }
+      .grid4 {
+        grid-template-columns: repeat(4, 58px);
+        grid-template-rows:    repeat(4, 58px);
+      }
+      .alpha-grid { grid-template-columns: repeat(7, 40px); gap: 4px; }
+      .acell { height: 40px; font-size: .9rem; }
+      .word-card { padding: 24px 28px; letter-spacing: 3px; }
+      .stats-row { gap: 20px; padding: 16px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Feedback overlay -->
+  <div id="fb-overlay"><div id="fb-icon"></div></div>
+
+  <!-- ═══════════════════════════════
+       MENU
+  ═══════════════════════════════ -->
+  <div id="s-menu" class="screen active">
+    <h1 class="app-title">Complex Working Memory</h1>
+    <p class="app-tagline">
+      Make rapid decisions while memorizing a growing sequence of items.
+      Recall them all perfectly to advance a level.
+    </p>
+    <div id="level-pill">Level 1</div>
+
+    <div class="mode-grid">
+      <button class="mode-btn" onclick="startGame('spatial')">
+        <span class="mode-icon">🔷</span>
+        <span class="mode-name">Spatial CWM</span>
+        <span class="mode-desc">Judge dot-pattern symmetry &amp; memorize grid positions</span>
+      </button>
+      <button class="mode-btn" onclick="startGame('verbal')">
+        <span class="mode-icon">🔤</span>
+        <span class="mode-name">Verbal CWM</span>
+        <span class="mode-desc">Judge word spelling &amp; memorize alphabet letters</span>
+      </button>
+    </div>
+
+    <p style="font-size:.78rem;color:#7d8590;text-align:center;max-width:380px;line-height:1.65;">
+      Each <strong style="color:#c9d1d9;">level N</strong> has N rounds.
+      Each round: <strong style="color:#c9d1d9;">4 decisions</strong> + <strong style="color:#c9d1d9;">1 item to memorise</strong>.
+      At the end recall every item in order. Perfect recall = level up!
+    </p>
+  </div>
+
+  <!-- ═══════════════════════════════
+       GAME (decision + remembering)
+  ═══════════════════════════════ -->
+  <div id="s-game" class="screen">
+    <div class="game-header">
+      <div class="game-meta">
+        <span id="gm-left">Round 1 of 1</span>
+        <span id="gm-right">Decision 1 / 4</span>
+      </div>
+      <div class="prog-track"><div id="game-prog" style="width:0%"></div></div>
+    </div>
+
+    <div id="stage-hdr" class="stage-hdr"></div>
+
+    <div id="game-body" class="fade-in"
+         style="display:flex;flex-direction:column;align-items:center;gap:20px;"></div>
+
+    <div id="answer-row" class="answer-row" style="display:none;">
+      <button class="btn-yes" id="btn-yes" onclick="handleDecision(true)">✓ Yes</button>
+      <button class="btn-no"  id="btn-no"  onclick="handleDecision(false)">✗ No</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+       RECALL
+  ═══════════════════════════════ -->
+  <div id="s-recall" class="screen">
+    <div class="stage-hdr">
+      <div class="stage-title">Recall Stage</div>
+      <div id="recall-hint" class="stage-hint"></div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;">
+      <div class="recall-meta">Selections: <strong id="rc-count">0</strong> / <strong id="rc-total">0</strong></div>
+      <div id="recall-slots" class="recall-slots"></div>
+    </div>
+
+    <div id="recall-body" style="display:flex;flex-direction:column;align-items:center;gap:12px;"></div>
+
+    <div class="recall-actions">
+      <button class="btn-clear"  id="btn-clear"  onclick="clearRecall()">↺ Clear</button>
+      <button class="btn-submit" id="btn-submit"  onclick="submitRecall()" disabled>Submit →</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+       RESULT
+  ═══════════════════════════════ -->
+  <div id="s-result" class="screen">
+    <div id="r-emoji"   class="result-emoji"></div>
+    <div id="r-heading" class="result-heading"></div>
+    <div id="r-sub"     class="result-sub"></div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div id="st-dec"   class="stat-val"></div>
+        <div class="stat-lbl">Decisions Correct</div>
+      </div>
+      <div class="stat-box">
+        <div id="st-rec"   class="stat-val"></div>
+        <div class="stat-lbl">Recall</div>
+      </div>
+      <div class="stat-box">
+        <div id="st-lvl"   class="stat-val"></div>
+        <div class="stat-lbl">New Level</div>
+      </div>
+    </div>
+
+    <div class="result-btns">
+      <button class="btn-menu"  onclick="goMenu()">← Menu</button>
+      <button class="btn-again" id="btn-again" onclick="playAgain()"></button>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────
+const DECISIONS_PER_ROUND = 4;
+const REMEMBER_MS   = 2000;
+const FEEDBACK_MS   = 620;
+const TRANSITION_MS = 480;
+const DOT_ROWS = 7;
+const DOT_COLS = 7;
+const GRID_N   = 4;          // 4×4 memory grid
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+const WORDS = [
+  'APPLE','BRAIN','CHAIR','DANCE','EAGLE','FLAME','GRACE','HEART','IMAGE','JOKER',
+  'KNIFE','LIGHT','MUSIC','NIGHT','OCEAN','PEACE','QUEEN','RIVER','STORM','TIGER',
+  'UNITY','VOICE','WATER','YOUTH','ZEBRA','ANGLE','BLEND','CLOUD','DRINK','EARTH',
+  'FIELD','GIANT','HONOR','IVORY','JEWEL','KARMA','LEMON','MAPLE','NOBLE','ORBIT',
+  'PLANT','QUIET','RAPID','SHADE','TOWER','ULTRA','VALID','WORLD','XENON','YIELD',
+  'BRAVE','CRISP','DELTA','EVOKE','FROST','GLIDE','HASTE','INLET','JAZZY','KNACK',
+  'LUNAR','MIRTH','NORTH','OZONE','PIXEL','QUIRK','RIDER','SMOKE','TWIST','UMBER',
+];
+
+// ─────────────────────────────────────────────
+// GAME STATE
+// ─────────────────────────────────────────────
+let G = { level: 1 };          // persists across sessions in page lifetime
+
+function freshState(mode) {
+  G = {
+    mode,
+    level    : G.level,
+    round    : 0,             // 0-indexed current round
+    decIdx   : 0,             // decisions completed this round
+    okCount  : 0,             // correct decisions
+    totCount : 0,             // total decisions
+    memories : [],            // items to recall (cell indices or letters)
+    task     : null,          // { correct: bool }
+    picks    : [],            // user recall selections
+    usedWords: new Set(),
+    busy     : false,         // debounce flag
+  };
+}
+
+// ─────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────
+const el  = id => document.getElementById(id);
+const $   = (id, html) => { el(id).innerHTML = html; };
+const txt = (id, t)    => { el(id).textContent = t; };
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  el('s-' + name).classList.add('active');
+}
+
+// ─────────────────────────────────────────────
+// FEEDBACK ANIMATION
+// ─────────────────────────────────────────────
+async function showFeedback(correct) {
+  const ic = el('fb-icon');
+  ic.textContent = correct ? '✓' : '✗';
+  ic.className   = correct ? 'fb-ok' : 'fb-err';
+  ic.classList.add('show');
+  await wait(FEEDBACK_MS);
+  ic.classList.remove('show');
+  await wait(130);
+}
+
+// ─────────────────────────────────────────────
+// PROGRESS BAR
+// ─────────────────────────────────────────────
+function updateProgress() {
+  const total = G.level * (DECISIONS_PER_ROUND + 1);
+  const done  = G.round * (DECISIONS_PER_ROUND + 1) + G.decIdx;
+  el('game-prog').style.width = Math.min(100, Math.round(done / total * 100)) + '%';
+  txt('gm-left',  `Round ${G.round + 1} of ${G.level}`);
+  txt('gm-right', `Decision ${G.decIdx + 1} / ${DECISIONS_PER_ROUND}`);
+}
+
+// ─────────────────────────────────────────────
+// SPATIAL: DOT PATTERN GENERATOR
+// ─────────────────────────────────────────────
+function makeDotGrid(symmetric) {
+  const half = Math.floor(DOT_COLS / 2);
+  const g = Array.from({ length: DOT_ROWS }, () => Array(DOT_COLS).fill(false));
+
+  if (symmetric) {
+    for (let r = 0; r < DOT_ROWS; r++) {
+      for (let c = 0; c < half; c++) {
+        const v = Math.random() < 0.42;
+        g[r][c] = v;
+        g[r][DOT_COLS - 1 - c] = v;
+      }
+      if (DOT_COLS % 2) g[r][half] = Math.random() < 0.42;
+    }
+  } else {
+    let tries = 0;
+    do {
+      for (let r = 0; r < DOT_ROWS; r++)
+        for (let c = 0; c < DOT_COLS; c++)
+          g[r][c] = Math.random() < 0.38;
+      tries++;
+    } while (tries < 40 && isSymGrid(g));
+
+    // Hard-guarantee asymmetry
+    if (isSymGrid(g)) {
+      const mid = Math.floor(DOT_ROWS / 2);
+      g[mid][0] = !g[mid][DOT_COLS - 1];
+    }
+  }
+  return g;
+}
+
+function isSymGrid(g) {
+  for (let r = 0; r < DOT_ROWS; r++)
+    for (let c = 0; c < Math.floor(DOT_COLS / 2); c++)
+      if (g[r][c] !== g[r][DOT_COLS - 1 - c]) return false;
+  return true;
+}
+
+function renderDotPattern(g) {
+  let h = `<div class="dot-pattern" style="grid-template-columns:repeat(${DOT_COLS},18px);">`;
+  for (let r = 0; r < DOT_ROWS; r++)
+    for (let c = 0; c < DOT_COLS; c++)
+      h += `<div class="dot${g[r][c] ? ' on' : ''}"></div>`;
+  return h + '</div>';
+}
+
+// ─────────────────────────────────────────────
+// VERBAL: WORD HELPERS
+// ─────────────────────────────────────────────
+function pickWord() {
+  const avail = WORDS.filter(w => !G.usedWords.has(w));
+  const pool  = avail.length ? avail : WORDS;
+  const w     = pool[Math.floor(Math.random() * pool.length)];
+  G.usedWords.add(w);
+  return w;
+}
+
+function scramble(word) {
+  const a = word.split('');
+  let res = word, t = 0;
+  while (res === word && t++ < 60) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    res = a.join('');
+  }
+  return res;
+}
+
+// ─────────────────────────────────────────────
+// MAIN FLOW
+// ─────────────────────────────────────────────
+function startGame(mode) {
+  freshState(mode);
+  showScreen('game');
+  startRound();
+}
+
+async function startRound() {
+  G.decIdx = 0;
+  updateProgress();
+
+  $('stage-hdr', '');
+  $('game-body', `
+    <div class="round-banner fade-in">Round ${G.round + 1} of ${G.level}</div>
+    <div class="round-sub">Prepare for ${DECISIONS_PER_ROUND} decisions…</div>
+  `);
+  el('answer-row').style.display = 'none';
+
+  await wait(1050);
+  runDecision();
+}
+
+// ─────────────────────────────────────────────
+// DECISION STAGE
+// ─────────────────────────────────────────────
+function runDecision() {
+  G.busy = false;
+  updateProgress();
+
+  if (G.mode === 'spatial') {
+    $('stage-hdr', `
+      <div class="stage-title">Is this pattern symmetric?</div>
+      <div class="stage-hint">Vertical (left–right) axis of symmetry</div>
+    `);
+    const sym  = Math.random() < 0.5;
+    const grid = makeDotGrid(sym);
+    G.task = { correct: sym };
+    $('game-body', `<div class="fade-in">${renderDotPattern(grid)}</div>`);
+
+  } else {
+    $('stage-hdr', `
+      <div class="stage-title">Is this word spelled correctly?</div>
+      <div class="stage-hint">Click Yes or No</div>
+    `);
+    const word    = pickWord();
+    const correct = Math.random() < 0.5;
+    const shown   = correct ? word : scramble(word);
+    G.task = { correct };
+    $('game-body', `<div class="fade-in"><div class="word-card">${shown}</div></div>`);
+  }
+
+  const row = el('answer-row');
+  row.style.display = 'flex';
+  el('btn-yes').disabled = false;
+  el('btn-no').disabled  = false;
+}
+
+async function handleDecision(userYes) {
+  if (G.busy) return;
+  G.busy = true;
+
+  el('btn-yes').disabled = true;
+  el('btn-no').disabled  = true;
+  el('answer-row').style.display = 'none';
+
+  const ok = (userYes === G.task.correct);
+  if (ok) G.okCount++;
+  G.totCount++;
+
+  await showFeedback(ok);
+
+  G.decIdx++;
+  if (G.decIdx >= DECISIONS_PER_ROUND) {
+    runRemembering();
+  } else {
+    runDecision();
+  }
+}
+
+// ─────────────────────────────────────────────
+// REMEMBERING STAGE
+// ─────────────────────────────────────────────
+async function runRemembering() {
+  el('answer-row').style.display = 'none';
+
+  const progDone = G.round * (DECISIONS_PER_ROUND + 1) + DECISIONS_PER_ROUND;
+  const progTotal = G.level * (DECISIONS_PER_ROUND + 1);
+  el('game-prog').style.width = Math.round(progDone / progTotal * 100) + '%';
+  txt('gm-right', 'Remember!');
+
+  $('stage-hdr', `<div class="stage-title">Memorise this!</div>`);
+
+  if (G.mode === 'spatial') {
+    // Pick a unique cell (avoid repeats while possible)
+    const totalCells = GRID_N * GRID_N;
+    let cell;
+    if (G.memories.length < totalCells) {
+      do { cell = Math.floor(Math.random() * totalCells); }
+      while (G.memories.includes(cell));
+    } else {
+      cell = Math.floor(Math.random() * totalCells);
+    }
+    G.memories.push(cell);
+
+    let gridH = `<div class="grid4">`;
+    for (let i = 0; i < totalCells; i++)
+      gridH += `<div class="gcell${i === cell ? ' lit' : ''}"></div>`;
+    gridH += '</div>';
+
+    $('game-body', `
+      <div class="fade-in" style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+        ${gridH}
+        <div class="timer-track"><div id="mem-timer"></div></div>
+      </div>
+    `);
+
+  } else {
+    const letter = ALPHABET[Math.floor(Math.random() * 26)];
+    G.memories.push(letter);
+
+    $('game-body', `
+      <div class="fade-in" style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+        <div class="big-letter">${letter}</div>
+        <div class="timer-track"><div id="mem-timer"></div></div>
+      </div>
+    `);
+  }
+
+  // Drain timer bar
+  await wait(40);
+  const bar = el('mem-timer');
+  if (bar) {
+    bar.style.transition = `width ${REMEMBER_MS}ms linear`;
+    bar.style.width = '0%';
+  }
+
+  await wait(REMEMBER_MS);
+  G.round++;
+
+  await wait(TRANSITION_MS);
+  if (G.round >= G.level) {
+    startRecall();
+  } else {
+    startRound();
+  }
+}
+
+// ─────────────────────────────────────────────
+// RECALL STAGE
+// ─────────────────────────────────────────────
+function startRecall() {
+  G.picks = [];
+  showScreen('recall');
+  txt('rc-total', G.level);
+  refreshSlots();
+
+  if (G.mode === 'spatial') {
+    txt('recall-hint', 'Click each cell in the order it was highlighted');
+
+    let h = `<div class="grid4" id="recall-grid">`;
+    for (let i = 0; i < GRID_N * GRID_N; i++)
+      h += `<div class="gcell clickable" id="rc${i}" onclick="pickCell(${i})"></div>`;
+    h += '</div>';
+    $('recall-body', h);
+
+  } else {
+    txt('recall-hint', 'Click the letters in the order they were shown');
+
+    let h = `<div class="alpha-grid">`;
+    for (const ch of ALPHABET)
+      h += `<div class="acell" id="ra${ch}" onclick="pickLetter('${ch}')">${ch}</div>`;
+    h += '</div>';
+    $('recall-body', h);
+  }
+
+  el('btn-submit').disabled = true;
+  el('btn-clear').disabled  = false;
+}
+
+function refreshSlots() {
+  let h = '';
+  for (let i = 0; i < G.level; i++) {
+    if (i < G.picks.length) {
+      const v = G.mode === 'spatial' ? `#${i + 1}` : G.picks[i];
+      h += `<div class="rslot filled">${v}</div>`;
+    } else {
+      h += `<div class="rslot empty"></div>`;
+    }
+  }
+  $('recall-slots', h);
+  txt('rc-count', G.picks.length);
+  el('btn-submit').disabled = G.picks.length < G.level;
+}
+
+function pickCell(idx) {
+  if (G.picks.length >= G.level) return;
+  if (G.picks.includes(idx)) return;     // unique cells in memory, so this is intentional
+
+  G.picks.push(idx);
+  const c = el('rc' + idx);
+  c.classList.add('picked');
+  c.textContent = G.picks.length;
+  refreshSlots();
+}
+
+function pickLetter(ch) {
+  if (G.picks.length >= G.level) return;
+
+  G.picks.push(ch);
+  const c = el('ra' + ch);
+  c.classList.add('a-picked');
+  const times = G.picks.filter(s => s === ch).length;
+  c.textContent = times > 1 ? `${ch}×${times}` : ch;
+  refreshSlots();
+}
+
+function clearRecall() {
+  G.picks = [];
+
+  if (G.mode === 'spatial') {
+    for (let i = 0; i < GRID_N * GRID_N; i++) {
+      const c = el('rc' + i);
+      if (c) { c.classList.remove('picked'); c.textContent = ''; }
+    }
+  } else {
+    for (const ch of ALPHABET) {
+      const c = el('ra' + ch);
+      if (c) { c.classList.remove('a-picked'); c.textContent = ch; }
+    }
+  }
+  refreshSlots();
+}
+
+// ─────────────────────────────────────────────
+// SUBMIT RECALL
+// ─────────────────────────────────────────────
+async function submitRecall() {
+  el('btn-submit').disabled = true;
+  el('btn-clear').disabled  = true;
+
+  let allOk = true;
+
+  for (let i = 0; i < G.memories.length; i++) {
+    const ok = G.picks[i] === G.memories[i];
+    if (!ok) allOk = false;
+
+    if (G.mode === 'spatial') {
+      const pc = el('rc' + G.picks[i]);
+      if (pc) pc.classList.add(ok ? 'r-ok' : 'r-bad');
+      if (!ok) {
+        const cc = el('rc' + G.memories[i]);
+        if (cc) cc.classList.add('r-miss');
+      }
+    } else {
+      const pc = el('ra' + G.picks[i]);
+      if (pc) {
+        pc.classList.remove('a-picked');
+        pc.classList.add(ok ? 'r-ok' : 'r-bad');
+        pc.textContent = G.picks[i];
+      }
+      if (!ok) {
+        const cc = el('ra' + G.memories[i]);
+        if (cc) { cc.classList.add('r-miss'); cc.textContent = G.memories[i]; }
+      }
+    }
+  }
+
+  await wait(1300);
+  showResult(allOk);
+}
+
+// ─────────────────────────────────────────────
+// RESULT
+// ─────────────────────────────────────────────
+function showResult(passed) {
+  showScreen('result');
+
+  if (passed) {
+    G.level++;
+    el('r-emoji').textContent   = '🎉';
+    el('r-heading').textContent = 'Perfect Recall!';
+    el('r-heading').className   = 'result-heading pass';
+    txt('r-sub', `Outstanding! You've earned Level ${G.level}.`);
+    txt('btn-again', 'Next Level →');
+  } else {
+    el('r-emoji').textContent   = '💪';
+    el('r-heading').textContent = 'Recall Incomplete';
+    el('r-heading').className   = 'result-heading fail';
+    txt('r-sub', `Good effort — keep training! Stay on Level ${G.level}.`);
+    txt('btn-again', 'Try Again');
+  }
+
+  txt('st-dec', `${G.okCount}/${G.totCount}`);
+  txt('st-rec', passed ? '100%' : 'Incomplete');
+  txt('st-lvl', G.level);
+  txt('level-pill', `Level ${G.level}`);
+}
+
+function goMenu()    { showScreen('menu'); txt('level-pill', `Level ${G.level}`); }
+function playAgain() { startGame(G.mode); }
+</script>
+</body>
+</html>
