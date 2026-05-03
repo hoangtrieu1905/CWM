@@ -38,6 +38,17 @@
 
     <div class="shortcut-hint">Keyboard: <strong>A</strong> = Yes, <strong>L</strong> = No</div>
 
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:center;width:100%;">
+        <label style="font-size:.88rem;color:#7d8590;">Speed factor:</label>
+        <input id="speed-factor" type="number" step="0.1" min="0.3" max="2" value="1.0"
+               style="width:90px;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,.08);background:transparent;color:inherit;" />
+        <button class="btn-menu" onclick="(document.getElementById('speed-factor').value='1.0')">Default</button>
+        <button class="btn-menu" onclick="(document.getElementById('speed-factor').value='0.8')">Faster</button>
+        <button class="btn-menu" onclick="(document.getElementById('speed-factor').value='0.6')">Fastest</button>
+      </div>
+      <div style="font-size:.76rem;color:#9aa4b2;">Lower values run faster; default 1.0 (decimal factor)</div>
+    </div>
     <p style="font-size:.78rem;color:#7d8590;text-align:center;max-width:380px;line-height:1.65;">
       Each <strong style="color:#c9d1d9;">level N</strong> has N rounds.
       Each round: <strong style="color:#c9d1d9;">4 decisions</strong> + <strong style="color:#c9d1d9;">1 item to memorise</strong>.

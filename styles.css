@@ -253,7 +253,7 @@ body {
 }
 
 .timer-track {
-  width: 180px;
+  width: 220px;
   height: 4px;
   background: rgba(255,255,255,.1);
   border-radius: 2px;
@@ -262,6 +262,13 @@ body {
 #mem-timer {
   height: 100%;
   background: #58a6ff;
+  border-radius: 2px;
+  width: 100%;
+}
+/* decision timer bar - different color to distinguish from memory bar */
+#decision-timer {
+  height: 100%;
+  background: #f85149;
   border-radius: 2px;
   width: 100%;
 }

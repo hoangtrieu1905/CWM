@@ -10,6 +10,25 @@ const GRID_N = 4;
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const SYM_DIFFICULTY = 0.52;
 
+// Utility: shuffle array in-place
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Build a mixed array of booleans for decisions in a round (ensures at least one true and one false)
+function makeDecisionMix() {
+  if (DECISIONS_PER_ROUND <= 1) return Array(DECISIONS_PER_ROUND).fill(true);
+  const minTrue = 1;
+  const maxTrue = DECISIONS_PER_ROUND - 1;
+  const trueCount = minTrue + Math.floor(Math.random() * (maxTrue - minTrue + 1));
+  const arr = [].concat(Array(trueCount).fill(true), Array(DECISIONS_PER_ROUND - trueCount).fill(false));
+  return shuffleInPlace(arr);
+}
+
 const WORDS = [
   'APPLE', 'BRAIN', 'CHAIR', 'DANCE', 'EAGLE', 'FLAME', 'GRACE', 'HEART', 'IMAGE', 'JOKER',
   'KNIFE', 'LIGHT', 'MUSIC', 'NIGHT', 'OCEAN', 'PEACE', 'QUEEN', 'RIVER', 'STORM', 'TIGER',
@@ -39,6 +58,7 @@ function freshState(mode) {
     stage: 'menu',
     runId: 0,
     focusIdx: 0,
+    speedFactor: 1.0,
   };
 }
 
@@ -192,14 +212,25 @@ function scramble(word) {
 }
 
 function pickDecisionTiming(level) {
-  const memoryMs = Math.max(1100, BASE_REMEMBER_MS - ((level - 1) * 70));
-  const transitionMs = Math.max(240, TRANSITION_MS - ((level - 1) * 12));
-  return { memoryMs, transitionMs };
+  // Adjust base memory and transition times by the user speed factor and the level multiplier
+  const levelMul = Math.pow(0.92, Math.max(0, level - 1));
+  const sf = (G && G.speedFactor) ? G.speedFactor : 1.0;
+  const memoryMs = Math.max(900, Math.round(BASE_REMEMBER_MS * sf * levelMul));
+  const transitionMs = Math.max(240, Math.round(TRANSITION_MS * sf * Math.pow(0.95, Math.max(0, level - 1))));
+  // Make per-decision time match (or be slightly longer than) the memory display time by default
+  const decisionMs = Math.max(1200, Math.round(memoryMs));
+  return { memoryMs, transitionMs, decisionMs };
 }
 
 function startGame(mode) {
   ensureAudio();
   freshState(mode);
+  // read speed factor from menu input if present
+  const sfEl = el('speed-factor');
+  if (sfEl) {
+    const v = parseFloat(sfEl.value);
+    G.speedFactor = isFinite(v) ? Math.max(0.3, Math.min(2, v)) : 1.0;
+  }
   showScreen('game');
   startRound();
 }
@@ -214,6 +245,8 @@ function restartGame() {
 
 async function startRound() {
   G.decIdx = 0;
+    // generate a mixed pattern of correct/incorrect answers for this round
+    G.currentDecisions = makeDecisionMix();
   updateProgress();
   txt('gm-right', `Decision 1 / ${DECISIONS_PER_ROUND}`);
   $('stage-hdr', '');
@@ -227,7 +260,7 @@ async function startRound() {
   runDecision(G.runId);
 }
 
-function runDecision(runId) {
+async function runDecision(runId) {
   if (runId !== G.runId) return;
   G.busy = false;
   updateProgress();
@@ -238,9 +271,34 @@ function runDecision(runId) {
       <div class="stage-title">Is this pattern symmetric?</div>
       <div class="stage-hint">Vertical left-right symmetry</div>
     `);
-    const symmetric = Math.random() < SYM_DIFFICULTY;
-    const grid = makeDotGrid(symmetric);
-    G.task = { correct: symmetric };
+      // take the pre-generated correctness for this decision if available
+      const correct = (G.currentDecisions && G.currentDecisions[G.decIdx] !== undefined)
+        ? G.currentDecisions[G.decIdx]
+        : (Math.random() < SYM_DIFFICULTY);
+    // create a pattern that's either truly symmetric (correct) or near-symmetric (deceptive wrong)
+    let grid = makeDotGrid(true);
+    if (!correct) {
+      // introduce a small number of asymmetric flips on one side to make it subtly wrong
+      const flips = 1 + Math.floor(Math.random() * 3); // 1-3 subtle flips
+      for (let f = 0; f < flips; f++) {
+        const r = Math.floor(Math.random() * DOT_ROWS);
+        const c = Math.floor(Math.random() * Math.floor(DOT_COLS / 2));
+        grid[r][c] = !grid[r][c];
+      }
+      // ensure not accidentally symmetric
+      if (isSymGrid(grid)) grid[0][0] = !grid[0][0];
+    } else {
+      // for correct symmetric patterns, add symmetric noise (keeps symmetry but adds visual complexity)
+      for (let r = 0; r < DOT_ROWS; r++) {
+        for (let c = 0; c < DOT_COLS; c++) {
+          if (Math.random() < 0.06) {
+            const nc = DOT_COLS - 1 - c;
+            grid[r][c] = grid[r][nc] = Math.random() < 0.5;
+          }
+        }
+      }
+    }
+    G.task = { correct };
     $('game-body', `<div class="fade-in">${renderDotPattern(grid)}</div>`);
   } else {
     $('stage-hdr', `
@@ -248,27 +306,89 @@ function runDecision(runId) {
       <div class="stage-hint">Press A for Yes, L for No</div>
     `);
     const word = pickWord();
-    const correct = Math.random() < 0.5;
-    const shown = correct ? word : scramble(word);
+      // take the pre-generated correctness for this decision if available
+      const correct = (G.currentDecisions && G.currentDecisions[G.decIdx] !== undefined)
+        ? G.currentDecisions[G.decIdx]
+        : (Math.random() < 0.5);
+    let shown;
+    if (correct) {
+      shown = word;
+    } else {
+      // create subtler misspellings more often than full scrambles
+      if (Math.random() < 0.72) {
+        // apply a single small edit: swap adjacent or replace one letter with neighbor
+        let w = word.split('');
+        if (w.length > 2 && Math.random() < 0.6) {
+          const i = 1 + Math.floor(Math.random() * (w.length - 1));
+          [w[i], w[i - 1]] = [w[i - 1], w[i]];
+        } else {
+          const i = Math.floor(Math.random() * w.length);
+          const ch = w[i];
+          // replace with a nearby alphabet char
+          const repl = String.fromCharCode(((ch.charCodeAt(0) - 65 + (Math.random() < 0.5 ? 1 : -1) + 26) % 26) + 65);
+          w[i] = repl;
+        }
+        shown = w.join('');
+        if (shown === word) shown = scramble(word);
+      } else {
+        shown = scramble(word);
+      }
+    }
     G.task = { correct };
     $('game-body', `<div class="fade-in"><div class="word-card">${shown}</div></div>`);
   }
 
+  // show per-decision timer bar and start timeout according to timing
+  const timing = pickDecisionTiming(G.level);
   const row = el('answer-row');
   row.style.display = 'flex';
   el('btn-yes').disabled = false;
   el('btn-no').disabled = false;
+
+  // insert a small decision timer bar under the stage if not present
+  const dtId = 'decision-timer';
+  const existing = el(dtId);
+  if (!existing) {
+    const container = document.createElement('div');
+    container.className = 'timer-track';
+    container.style.marginTop = '12px';
+    container.innerHTML = `<div id="${dtId}"></div>`;
+    const gb = el('game-body');
+    if (gb) gb.appendChild(container);
+  }
+  const dt = el(dtId);
+  if (dt) {
+    // ensure bar starts full and then shrinks to 0 so the animation is visible
+    dt.style.transition = `none`;
+    dt.style.width = '100%';
+    // force reflow
+    // eslint-disable-next-line no-unused-expressions
+    dt.offsetHeight;
+    dt.style.transition = `width ${timing.decisionMs}ms linear`;
+    await wait(20);
+    dt.style.width = '0%';
+  }
+
+  // clear any previous decision timer
+  if (G.decisionTimer) { clearTimeout(G.decisionTimer); G.decisionTimer = null; }
+  G.decisionTimer = setTimeout(() => {
+    // timeout = treat as incorrect
+    if (!G.busy) handleDecision(null);
+  }, timing.decisionMs + 30);
 }
 
 async function handleDecision(userYes) {
   if (G.busy) return;
   G.busy = true;
+  // clear decision timer if running
+  if (G.decisionTimer) { clearTimeout(G.decisionTimer); G.decisionTimer = null; }
 
   el('btn-yes').disabled = true;
   el('btn-no').disabled = true;
   el('answer-row').style.display = 'none';
 
-  const ok = userYes === G.task.correct;
+  // if userYes is null/undefined -> timeout, count as incorrect
+  const ok = (userYes === null || userYes === undefined) ? false : (userYes === G.task.correct);
   if (ok) G.okCount++;
   G.totCount++;
 
